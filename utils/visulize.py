@@ -52,7 +52,7 @@ def show_image(prediction, save_dir, name):
     for i, ten in enumerate(max_index):
         # print(i, ten.shape)
         img = tensor2img(ten)
-        img.save(os.path.join(save_dir, name[i] + '.png'))
+        img.save(os.path.join(save_dir, name[i]))
         # plt.imshow(img)
         # plt.show()
     return img

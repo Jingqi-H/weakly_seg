@@ -36,7 +36,7 @@ def setup_seed(seed):
 def main(seed, k_fold, batch_size, num_epoch, continue_my_model, continue_my_model_train_path, learning_rate, num_instance,
          delta_v, delta_d, p_var, p_dist, p_reg, p_seg, p_disc, p_cla, is_pseudo_mask, is_pre, is_pre_path):
     '''1准备数据集'''
-    transform = ImgMaskTransform()
+    transform = ImgMaskTransform(img_size=(256, 256))
     train_dataset = Metric_Learning_ImageFolder(root=image_folder + '/data_train', transform=transform)
     val_dataset = Metric_Learning_ImageFolder(root=image_folder + '/data_train', transform=transform)
 
@@ -222,8 +222,8 @@ def main(seed, k_fold, batch_size, num_epoch, continue_my_model, continue_my_mod
             total_curve = plot_loss_acc(data_frame)
             plt.savefig(os.path.join(save_dir, 'final_linear_statistics_' + 'K' + str(i + 1) + '.png'))
 
-            print('[Per_epoch]Val  acc:{} | auc:{} | f1:{}'.format(val_acc, val_auc, val_f1))
-            print('[Per_epoch]Test acc:{} | auc:{} | f1:{}'.format(test_acc, test_auc, test_f1))
+            # print('[Per_epoch]Val  acc:{} | auc:{} | f1:{}'.format(val_acc, val_auc, val_f1))
+            # print('[Per_epoch]Test acc:{} | auc:{} | f1:{}'.format(test_acc, test_auc, test_f1))
 
             if val_acc_1 > best_acc:
                 best_acc = val_acc_1
@@ -319,7 +319,7 @@ if __name__ == '__main__':
     print("start time:", datetime.datetime.now())
     print(f"Running fine tune classifier with args {args}")
 
-    # setup_seed(args.seed)
+    setup_seed(args.seed)
     save_dir, save_intermediate_dir, save_display_dir, save_csv_dir, save_best_dir, save_pre_img = init_dir(args.phase, args.date)
     main(args.seed, args.k_fold, args.batch_size, args.num_epoch, args.continue_my_model, continue_my_model_train_path,
          args.learning_rate, args.num_instance, args.delta_v, args.delta_d, args.p_var, args.p_dist, args.p_reg, args.p_seg,
