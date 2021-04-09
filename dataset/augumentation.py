@@ -105,7 +105,7 @@ liner_classifier_train_transform = transforms.Compose([
 ])
 
 liner_classifier_test_transform = transforms.Compose([
-    transforms.Resize((256, 512)),
+    transforms.Resize((128, 256)),
     transforms.ToTensor(),
     # transforms.Normalize([0.37818605, 0.27225745, 0.15962803], [0.16118085, 0.13099103, 0.1116703])
     transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])])

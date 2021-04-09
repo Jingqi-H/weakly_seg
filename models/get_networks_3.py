@@ -1,22 +1,50 @@
 import torch
 import torch.nn as nn
-import torchvision
 import torch.nn.functional as F
 
 from models.networks.extractors import resnet50
-from models.networks.auxiliary_module import MyUpsample
-from models.networks.auxiliary_module_2 import Decoder, ConvBn2d
 
 
 # ########## 说明 ################
 # 将特征提取，上采样，分类器拼接起来
-# 用了博客里面提到的tricks： https://blog.csdn.net/qq_21997625/article/details/86572942
+# 用了博客里的代码，删掉了注意力模块： https://blog.csdn.net/qq_21997625/article/details/86572942
+#
 # ################################
 
 
-class MyNetworks2(nn.Module):
+class ConvBn2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, dilation=1, stride=1, groups=1, is_bn=True):
+        super(ConvBn2d, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, stride=stride,
+                              dilation=dilation, groups=groups, bias=False)
+        # self.bn = SynchronizedBatchNorm2d(out_channels)
+        self.bn = nn.BatchNorm2d(out_channels)
+
+    def forward(self, z):
+        x = self.conv(z)
+        x = self.bn(x)
+        return x
+
+
+class Decoder(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(Decoder, self).__init__()
+        self.conv = ConvBn2d(in_channels, out_channels, kernel_size=3, padding=1)
+
+    def forward(self, x, e=None):
+        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=True)
+        if e is not None:
+            # print('e', e.shape)
+            x = torch.cat([x, e], 1)
+
+        x = F.relu(self.conv(x), inplace=True)
+        # print('x_new',x.size())
+        return x
+
+
+class MyNetworks3(nn.Module):
     def __init__(
-            self, n_instance=5, n_classes=5, embed_dim=4, branch_size=256,
+            self, final_dim=8, n_instance=5, n_classes=5, embed_dim=4, branch_size=256,
             deep_features_size=2048, backend='resnet50',
             pretrained=False, model_path='the path of ImageNet_weights'):
         """
@@ -31,7 +59,7 @@ class MyNetworks2(nn.Module):
         :param pretrained:
         :param model_path:
         """
-        super(MyNetworks2, self).__init__()
+        super(MyNetworks3, self).__init__()
         self.n_instance = n_instance
         self.n_classes = n_classes
         self.embed_dim = embed_dim
@@ -40,6 +68,7 @@ class MyNetworks2(nn.Module):
         self.backend = backend
         self.pretrained = pretrained
         self.model_path = model_path
+        self.final_dim = final_dim
 
         self.extractors = resnet50(self.pretrained, self.model_path)
 
@@ -54,34 +83,35 @@ class MyNetworks2(nn.Module):
         self.encoder5 = self.extractors.layer4  # 2048
 
         self.center = nn.Sequential(
-            ConvBn2d(2048, 2048, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+            # ConvBn2d(2048, 2048, kernel_size=3, padding=1),
+            # nn.ReLU(inplace=True),
             ConvBn2d(2048, 1024, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
-        self.decoder5 = Decoder(1024 + 2048, 2048, 256)
-        self.decoder4 = Decoder(256 + 1024, 1024, 256)
-        self.decoder3 = Decoder(256 + 512, 512, 256)
-        self.decoder2 = Decoder(256 + 256, 256, 256)
-        self.decoder1 = Decoder(256, 64, 256)
+        self.decoder5 = Decoder(1024 + 2048, 2048)
+        self.decoder4 = Decoder(2048 + 1024, 1024)
+        self.decoder3 = Decoder(1024 + 512, 512)
+        self.decoder2 = Decoder(512 + 256, 256)
+        # self.decoder1 = Decoder(256 + 64, 64)
+        self.decoder1 = Decoder(256, 64)
 
         self.logit = nn.Sequential(
-            nn.Conv2d(1344, 256, 3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.Conv2d(256, 128, 3, padding=4, dilation=4, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(128, 64, 3, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
+            # nn.Conv2d(1344, 256, 3, padding=1),
+            # nn.BatchNorm2d(256),
+            # nn.ReLU(),
+            # nn.Conv2d(256, 128, 3, padding=4, dilation=4, bias=False),
+            # nn.BatchNorm2d(128),
+            # nn.ReLU(),
+            # nn.Conv2d(128, 64, 3, padding=1, bias=False),
+            # nn.BatchNorm2d(64),
+            # nn.ReLU(),
             nn.Conv2d(64, 32, 3, padding=1, bias=False),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(32, 8, 3, padding=1, bias=False),
-            nn.BatchNorm2d(8),
+            nn.Conv2d(32, self.final_dim, 3, padding=1, bias=False),
+            nn.BatchNorm2d(self.final_dim),
             nn.ReLU(),
         )
 
@@ -99,7 +129,7 @@ class MyNetworks2(nn.Module):
 
         # ----------------- embedding -----------------
         self.embedding = nn.Sequential(
-            nn.Conv2d(8, 8, 1),
+            nn.Conv2d(self.final_dim, 8, 1),
             nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.Conv2d(8, self.embed_dim, 1)
@@ -107,7 +137,7 @@ class MyNetworks2(nn.Module):
 
         # ----------------- binary segmentation -----------------
         self.segmenting = nn.Sequential(
-            nn.Conv2d(8, 8, 1),
+            nn.Conv2d(self.final_dim, 8, 1),
             nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.Conv2d(8, self.n_instance, 1)
@@ -138,18 +168,18 @@ class MyNetworks2(nn.Module):
         # print('d2:', d2.shape)
         d1 = self.decoder1(d2)
         # print('d1:', d1.shape)
-        f = torch.cat((
-                    F.interpolate(e1, scale_factor=2, mode='bilinear', align_corners=False),
-                    d1,
-                    F.interpolate(d2, scale_factor=2, mode='bilinear', align_corners=False),
-                    F.interpolate(d3, scale_factor=4, mode='bilinear', align_corners=False),
-                    F.interpolate(d4, scale_factor=8, mode='bilinear', align_corners=False),
-                    F.interpolate(d5, scale_factor=16, mode='bilinear', align_corners=False),
-                ), 1)
+        # f = torch.cat((
+        #             F.interpolate(e1, scale_factor=2, mode='bilinear', align_corners=False),
+        #             d1,
+        #             F.interpolate(d2, scale_factor=2, mode='bilinear', align_corners=False),
+        #             F.interpolate(d3, scale_factor=4, mode='bilinear', align_corners=False),
+        #             F.interpolate(d4, scale_factor=8, mode='bilinear', align_corners=False),
+        #             F.interpolate(d5, scale_factor=16, mode='bilinear', align_corners=False),
+        #         ), 1)
         # print(f.shape)
-        logit = self.logit(f)
+        # logit = self.logit(f)
 
-        # logit = self.logit(d1)
+        logit = self.logit(d1)
         # # 具体任务：分割/嵌入
         y_seg = self.segmenting(logit)
         y_em = self.embedding(logit)
@@ -165,7 +195,7 @@ class MyNetworks2(nn.Module):
 
 
 if __name__ == '__main__':
-    net = MyNetworks2(n_instance=5,
+    net = MyNetworks3(n_instance=5,
                       n_classes=5, embed_dim=2,
                       branch_size=1024,
                       deep_features_size=2048,

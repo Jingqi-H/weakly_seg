@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
 from models.get_networks import MyNetworks
+from models.get_networks_2 import MyNetworks2
+from models.get_networks_3 import MyNetworks3
 from dataset import augumentation
 from dataset.MyImageFolder import StandarImageFolder
 from utils.wheels import s2t, mkfile
@@ -18,22 +20,24 @@ from utils.visulize import plot_confusion_matrix, plot_roc, plot_confusion_matri
 
 # 参数初始化
 # 60
-# data_path = '/home/huangjq/PyCharmCode/1_dataset/1_glaucoma/v14/classification_data/img/objective_img'
-# model_weight_path = '/home/huangjq/PyCharmCode/project/2-weakly_seg/results/train_resnet50+unet+_model/0325_OursUnet_1_1/best/model'
+data_path = '/home/huangjq/PyCharmCode/1_dataset/1_glaucoma/v14/classification_data/img/objective_img'
+model_weight_path = '/home/huangjq/PyCharmCode/4_project/7-paper/2-weakly_seg/results/train_resnet50+unet+_model/OursUnet_7_2/best/model'
 # 59
 # data_path = '/home/huangjq/PyCharmCode/linshi/v14/classification_data/img/objective_img'
 # 88
-data_path = '/home/huangjq/PyCharmCode/project/v14/classification_data/img/objective_img'
-model_weight_path = '/home/huangjq/PyCharmCode/project/2-weakly_seg/results/train_resnet50+unet+_model/0325_OursUnet_1_2/best/model'
+# data_path = '/home/huangjq/PyCharmCode/project/v14/classification_data/img/objective_img'
+# model_weight_path = '/home/huangjq/PyCharmCode/project/2-weakly_seg/results/train_resnet50+unet+_model/0325_OursUnet_1_2/best/model'
 
 # save_display_dir = os.path.join('./results/predictor', model_weight_path.split('/')[-2])
 # mkfile(save_display_dir)
+
 start_time = time.time()
+print('model:', model_weight_path.split('/')[-3])
 print("start time:", datetime.datetime.now())
 
 # create model
 # load model weights  build_lane_network
-net = MyNetworks(n_instance=5,
+net = MyNetworks3(n_instance=5,
                  n_classes=5, embed_dim=2,
                  branch_size=1024,
                  deep_features_size=2048,
@@ -55,18 +59,11 @@ net = MyNetworks(n_instance=5,
 # the same as train's
 
 data_transform = transforms.Compose([
-    transforms.Resize((256, 512)),
+    transforms.Resize((128, 256)),
     transforms.ToTensor(),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
-# read class_indict
-try:
-    json_file = open('./class_indices.json', 'r')
-    class_indict = json.load(json_file)
-except Exception as e:
-    print(e)
-    exit(-1)
 
 test_data = StandarImageFolder(root=os.path.join(data_path, 'data_test'),
                                transform=data_transform)

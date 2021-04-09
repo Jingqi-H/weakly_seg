@@ -20,8 +20,11 @@ from utils.metrics import metrics_score
 from utils.visulize import plot_part_loss_AucF1, plot_loss_acc
 from loss.discriminative_loss import DiscriminativeLoss_wizaron
 from loss.lovase_loss import MyLovaszLoss
+from loss.dice_loss import SoftDiceLoss
 from trainer import train
 from models.get_networks import MyNetworks
+from models.get_networks_2 import MyNetworks2
+from models.get_networks_3 import MyNetworks3
 from eval import val_test, test
 
 
@@ -33,10 +36,11 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def main(seed, k_fold, batch_size, num_epoch, continue_my_model, continue_my_model_train_path, learning_rate, num_instance,
+def main(seed, k_fold, batch_size, num_epoch, continue_my_model, continue_my_model_train_path, learning_rate,
+         num_instance,
          delta_v, delta_d, p_var, p_dist, p_reg, p_seg, p_disc, p_cla, is_pseudo_mask, is_pre, is_pre_path):
     '''1准备数据集'''
-    transform = ImgMaskTransform(img_size=(256, 256))
+    transform = ImgMaskTransform(img_size=(128, 256))
     train_dataset = Metric_Learning_ImageFolder(root=image_folder + '/data_train', transform=transform)
     val_dataset = Metric_Learning_ImageFolder(root=image_folder + '/data_train', transform=transform)
 
@@ -71,17 +75,17 @@ def main(seed, k_fold, batch_size, num_epoch, continue_my_model, continue_my_mod
                                                                    train_dataset, val_dataset, batch_size)
         test_data = StandarImageFolder(root=os.path.join(image_folder, 'data_test'),
                                        transform=augumentation.liner_classifier_test_transform)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4)
+        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=16)
 
         '''3初始化模型'''
 
-        net = MyNetworks(n_instance=5,
-                         n_classes=5, embed_dim=2,
-                         branch_size=1024,
-                         deep_features_size=2048,
-                         backend='resnet50',
-                         pretrained=is_pre,
-                         model_path=is_pre_path).cuda()
+        net = MyNetworks3(n_instance=5,
+                          n_classes=5, embed_dim=2,
+                          branch_size=1024,
+                          deep_features_size=2048,
+                          backend='resnet50',
+                          pretrained=is_pre,
+                          model_path=is_pre_path).cuda()
         for param in net.extractors.conv1.parameters():
             param.requires_grad = False
         for param in net.extractors.bn1.parameters():
@@ -130,7 +134,9 @@ def main(seed, k_fold, batch_size, num_epoch, continue_my_model, continue_my_mod
                                                     scale_reg=p_reg,
                                                     usegpu=True).cuda()
         cla_criterion = nn.CrossEntropyLoss().cuda()
-        seg_criterion = MyLovaszLoss().cuda()
+        # seg_criterion = nn.CrossEntropyLoss().cuda()
+        seg_criterion = SoftDiceLoss().cuda()
+        # seg_criterion = MyLovaszLoss().cuda()
 
         results = {'train_loss': [], 'train_acc@1': [], 'train_acc@2': [],
                    'train_seg_loss': [], 'train_var_loss': [], 'train_dis_loss': [], 'train_reg_loss': [],
@@ -234,11 +240,11 @@ def main(seed, k_fold, batch_size, num_epoch, continue_my_model, continue_my_mod
                 torch.save(net.state_dict(),
                            os.path.join(save_best_dir, 'model/K' + str(i + 1) + 'EP' + str(epoch) + '.pth'))
                 print('[Best]\nVal:  acc:{} | recalll:{} | precision:{} | auc:{} | f1:{}'.format(val_acc, val_recall,
-                                                                                               val_precision, val_auc,
-                                                                                               val_f1))
+                                                                                                 val_precision, val_auc,
+                                                                                                 val_f1))
                 print('Test: acc:{} | recalll:{} | precision:{} | auc:{} | f1:{}'.format(test_acc, test_recall,
-                                                                                               test_precision, test_auc,
-                                                                                               test_f1))
+                                                                                         test_precision, test_auc,
+                                                                                         test_f1))
 
             if epoch % 100 == 0:
                 # 保存中间结果
@@ -271,7 +277,6 @@ if __name__ == '__main__':
 
     # 88
     # 以前的数据集，判断现在的数据集有没有脏数据
-    # image_folder = '/home/huangjq/PyCharmCode/project/from_yolo'
     # image_folder = '/home/huangjq/PyCharmCode/project/v14/classification_data/img/objective_img'
     # mask_folder = '/home/huangjq/PyCharmCode/project/v14/classification_data/seg_mask/obj_mask'
     # model_path = '/home/huangjq/PyCharmCode/project/pretrained_model/resnet50-pre.pth'
@@ -311,7 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('--is_pre_train', action='store_true', help='weather use ImageNet pre trained model')
 
     parser.add_argument('--learning_rate', default=1e-3, type=float, help='learning rate')
-    parser.add_argument('--num_epoch', type=int, default=3, help='Number of sweeps over the dataset to train')
+    parser.add_argument('--num_epoch', type=int, default=5, help='Number of sweeps over the dataset to train')
     parser.add_argument('--date', default='today', type=str, help='thr time you train your model')
     args = parser.parse_args()
     args, args_other = parser.parse_known_args()
@@ -320,9 +325,11 @@ if __name__ == '__main__':
     print(f"Running fine tune classifier with args {args}")
 
     setup_seed(args.seed)
-    save_dir, save_intermediate_dir, save_display_dir, save_csv_dir, save_best_dir, save_pre_img = init_dir(args.phase, args.date)
+    save_dir, save_intermediate_dir, save_display_dir, save_csv_dir, save_best_dir, save_pre_img = init_dir(args.phase,
+                                                                                                            args.date)
     main(args.seed, args.k_fold, args.batch_size, args.num_epoch, args.continue_my_model, continue_my_model_train_path,
-         args.learning_rate, args.num_instance, args.delta_v, args.delta_d, args.p_var, args.p_dist, args.p_reg, args.p_seg,
+         args.learning_rate, args.num_instance, args.delta_v, args.delta_d, args.p_var, args.p_dist, args.p_reg,
+         args.p_seg,
          args.p_disc, args.p_cla, args.is_pseudo_mask, args.is_pre_train, model_path)
 
     print("\nEnd time:", datetime.datetime.now())

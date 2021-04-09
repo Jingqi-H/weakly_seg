@@ -39,10 +39,16 @@ def caculate_all_loss(epoch,
     # #############################
     seg_loss = torch.tensor(0, dtype=seg_pred.dtype, device=seg_pred.device)
     if not seg_label is None:
-        seg_loss = seg_loss_func(seg_pred_after_mask, seg_label)
+        # print('seg_label is not none')
+        # print(seg_pred_after_mask.dtype, seg_label.dtype)  # torch.float32 torch.uint8
+        # print(seg_label.to(dtype=torch.int64).dtype)   # torch.int64
+        # print(torch.unique(seg_label))
+        # print(seg_pred_after_mask.shape, seg_label.shape)
+        seg_loss = seg_loss_func(seg_pred_after_mask, seg_label.to(dtype=torch.int64))
     else:
-        # print('using pseudo_label.')
-        if using_pseudo_mask and (epoch + 1) > 300:
+        # print('seg_label is none')
+        if using_pseudo_mask and (epoch + 1) > 150:
+            # print('using pseudo_label.')
             pseudo_label = pre2mask(seg_pred)  # 这个函数应该还可以优化：通过与各的概率图获得伪标签
             seg_loss = seg_loss_func(seg_pred, pseudo_label)
 
